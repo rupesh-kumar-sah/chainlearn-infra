@@ -1,0 +1,109 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: chainlearn-ingress
+  namespace: chainlearn
+  labels:
+    app.kubernetes.io/name: chainlearn-ingress
+    app.kubernetes.io/part-of: chainlearn
+  annotations:
+    # nginx-ingress annotations
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
+
+    # CORS
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://chainlearn.io,https://www.chainlearn.io"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, PUT, POST, DELETE, PATCH, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization"
+    nginx.ingress.kubernetes.io/cors-max-age: "3600"
+
+    # TLS with cert-manager
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+      more_set_headers "Permissions-Policy: camera=(), microphone=(), geolocation=()";
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - chainlearn.io
+        - www.chainlearn.io
+        - api.chainlearn.io
+      secretName: chainlearn-tls
+  rules:
+    # Frontend - main domain
+    - host: chainlearn.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: chainlearn-frontend
+                port:
+                  number: 80
+    - host: www.chainlearn.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: chainlearn-frontend
+                port:
+                  number: 80
+    # API - api subdomain
+    - host: api.chainlearn.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: chainlearn-api
+                port:
+                  number: 3001
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: chainlearn-api
+                port:
+                  number: 3001
+---
+# PodDisruptionBudget for high availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: chainlearn-api-pdb
+  namespace: chainlearn
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: chainlearn-api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: chainlearn-frontend-pdb
+  namespace: chainlearn
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: chainlearn-frontend

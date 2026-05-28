@@ -1,0 +1,144 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: chainlearn-dev
+
+resources:
+  - ../../base
+
+namePrefix: dev-
+commonLabels:
+  environment: dev
+
+patches:
+  # API - single replica for dev
+  - target:
+      kind: Deployment
+      name: chainlearn-api
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 100m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 128Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: 250m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 256Mi
+
+  # AI - single replica for dev
+  - target:
+      kind: Deployment
+      name: chainlearn-ai
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 250m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 256Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: 500m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 512Mi
+
+  # Indexer - single replica for dev
+  - target:
+      kind: Deployment
+      name: chainlearn-indexer
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+
+  # Frontend - single replica for dev
+  - target:
+      kind: Deployment
+      name: chainlearn-frontend
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+
+  # ConfigMap overrides for dev
+  - target:
+      kind: ConfigMap
+      name: chainlearn-api-config
+    patch: |
+      - op: replace
+        path: /data/NODE_ENV
+        value: "development"
+      - op: replace
+        path: /data/LOG_LEVEL
+        value: "debug"
+      - op: replace
+        path: /data/STELLAR_NETWORK
+        value: "testnet"
+
+  - target:
+      kind: ConfigMap
+      name: chainlearn-ai-config
+    patch: |
+      - op: replace
+        path: /data/APP_ENV
+        value: "development"
+      - op: replace
+        path: /data/LOG_LEVEL
+        value: "debug"
+
+  - target:
+      kind: ConfigMap
+      name: chainlearn-indexer-config
+    patch: |
+      - op: replace
+        path: /data/NODE_ENV
+        value: "development"
+      - op: replace
+        path: /data/LOG_LEVEL
+        value: "debug"
+      - op: replace
+        path: /data/STELLAR_NETWORK
+        value: "testnet"
+
+  - target:
+      kind: ConfigMap
+      name: chainlearn-frontend-config
+    patch: |
+      - op: replace
+        path: /data/NODE_ENV
+        value: "development"
+      - op: replace
+        path: /data/NEXT_PUBLIC_STELLAR_NETWORK
+        value: "testnet"
+
+  # Remove PDBs for dev (single replicas)
+  - target:
+      kind: PodDisruptionBudget
+      name: chainlearn-api-pdb
+    patch: |
+      - op: remove
+        path: /spec/minAvailable
+
+  - target:
+      kind: PodDisruptionBudget
+      name: chainlearn-frontend-pdb
+    patch: |
+      - op: remove
+        path: /spec/minAvailable
+
+configMapGenerator:
+  - name: chainlearn-dev-overrides
+    literals:
+      - DEBUG=chainlearn:*
+      - ENABLE_MOCK_AI=true

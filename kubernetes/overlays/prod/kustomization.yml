@@ -1,0 +1,216 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: chainlearn-prod
+
+resources:
+  - ../../base
+
+namePrefix: prod-
+commonLabels:
+  environment: prod
+
+patches:
+  # API - 3 replicas for production
+  - target:
+      kind: Deployment
+      name: chainlearn-api
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 3
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 500m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 512Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "1"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 1Gi
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+
+  # AI - 2 replicas for production
+  - target:
+      kind: Deployment
+      name: chainlearn-ai
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "1"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 1Gi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "2"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 2Gi
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+
+  # Indexer - 2 replicas for production
+  - target:
+      kind: Deployment
+      name: chainlearn-indexer
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 250m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 512Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: 500m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 1Gi
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+
+  # Frontend - 3 replicas for production
+  - target:
+      kind: Deployment
+      name: chainlearn-frontend
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 3
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 250m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 256Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: 500m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 512Mi
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+
+  # ConfigMap overrides for production
+  - target:
+      kind: ConfigMap
+      name: chainlearn-api-config
+    patch: |
+      - op: replace
+        path: /data/NODE_ENV
+        value: "production"
+      - op: replace
+        path: /data/LOG_LEVEL
+        value: "warn"
+      - op: replace
+        path: /data/STELLAR_NETWORK
+        value: "mainnet"
+      - op: replace
+        path: /data/STELLAR_HORIZON_URL
+        value: "https://horizon.stellar.org"
+      - op: replace
+        path: /data/CORS_ORIGINS
+        value: "https://chainlearn.io,https://www.chainlearn.io"
+
+  - target:
+      kind: ConfigMap
+      name: chainlearn-ai-config
+    patch: |
+      - op: replace
+        path: /data/APP_ENV
+        value: "production"
+      - op: replace
+        path: /data/LOG_LEVEL
+        value: "warn"
+      - op: replace
+        path: /data/MAX_CONCURRENT_REQUESTS
+        value: "50"
+
+  - target:
+      kind: ConfigMap
+      name: chainlearn-indexer-config
+    patch: |
+      - op: replace
+        path: /data/NODE_ENV
+        value: "production"
+      - op: replace
+        path: /data/LOG_LEVEL
+        value: "warn"
+      - op: replace
+        path: /data/STELLAR_NETWORK
+        value: "mainnet"
+      - op: replace
+        path: /data/STELLAR_HORIZON_URL
+        value: "https://horizon.stellar.org"
+
+  - target:
+      kind: ConfigMap
+      name: chainlearn-frontend-config
+    patch: |
+      - op: replace
+        path: /data/NODE_ENV
+        value: "production"
+      - op: replace
+        path: /data/NEXT_PUBLIC_STELLAR_NETWORK
+        value: "mainnet"
+
+  # Ingress - production domain
+  - target:
+      kind: Ingress
+      name: chainlearn-ingress
+    patch: |
+      - op: replace
+        path: /spec/tls/0/hosts
+        value:
+          - chainlearn.io
+          - www.chainlearn.io
+          - api.chainlearn.io
+      - op: replace
+        path: /spec/tls/0/secretName
+        value: chainlearn-prod-tls
+      - op: replace
+        path: /spec/rules/0/host
+        value: chainlearn.io
+      - op: replace
+        path: /spec/rules/1/host
+        value: api.chainlearn.io
+
+  # PDB - ensure minimum availability
+  - target:
+      kind: PodDisruptionBudget
+      name: chainlearn-api-pdb
+    patch: |
+      - op: replace
+        path: /spec/minAvailable
+        value: 2
+
+  - target:
+      kind: PodDisruptionBudget
+      name: chainlearn-frontend-pdb
+    patch: |
+      - op: replace
+        path: /spec/minAvailable
+        value: 2
+
+configMapGenerator:
+  - name: chainlearn-prod-overrides
+    literals:
+      - ENABLE_MOCK_AI=false
+      - ENABLE_RATE_LIMITING=true
+      - ENABLE_ANALYTICS=true

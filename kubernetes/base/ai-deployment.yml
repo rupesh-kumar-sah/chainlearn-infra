@@ -1,0 +1,145 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chainlearn-ai-config
+  namespace: chainlearn
+  labels:
+    app.kubernetes.io/name: chainlearn-ai
+    app.kubernetes.io/part-of: chainlearn
+data:
+  APP_ENV: "production"
+  PORT: "8000"
+  LOG_LEVEL: "info"
+  MODEL_CACHE_DIR: "/models"
+  MAX_CONCURRENT_REQUESTS: "10"
+  REQUEST_TIMEOUT_SECONDS: "120"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chainlearn-ai
+  namespace: chainlearn
+  labels:
+    app.kubernetes.io/name: chainlearn-ai
+    app.kubernetes.io/part-of: chainlearn
+    app.kubernetes.io/component: ai
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: chainlearn-ai
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: chainlearn-ai
+        app.kubernetes.io/part-of: chainlearn
+        app.kubernetes.io/component: ai
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: chainlearn-ai
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: ai
+          image: chainlearn-ai:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: chainlearn-ai-config
+          env:
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: chainlearn-secrets
+                  key: openai-api-key
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: chainlearn-secrets
+                  key: redis-url
+            - name: STELLAR_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: chainlearn-secrets
+                  key: stellar-secret-key
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            failureThreshold: 60
+            periodSeconds: 5
+          volumeMounts:
+            - name: model-cache
+              mountPath: /models
+      volumes:
+        - name: model-cache
+          emptyDir:
+            sizeLimit: 2Gi
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: chainlearn-ai
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chainlearn-ai
+  namespace: chainlearn
+  labels:
+    app.kubernetes.io/name: chainlearn-ai
+    app.kubernetes.io/part-of: chainlearn
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: chainlearn-ai
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chainlearn-ai
+  namespace: chainlearn
+  labels:
+    app.kubernetes.io/name: chainlearn-ai
+    app.kubernetes.io/part-of: chainlearn
