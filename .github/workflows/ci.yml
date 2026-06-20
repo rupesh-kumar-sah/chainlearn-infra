@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  validate-terraform:
+    name: Validate Terraform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7"
+      - name: Terraform fmt check
+        run: terraform fmt -check -recursive
+      - name: Terraform init (dev)
+        run: terraform -chdir=terraform/environments/dev init -backend=false
+      - name: Terraform validate (dev)
+        run: terraform -chdir=terraform/environments/dev validate
+
+  validate-docker:
+    name: Validate Docker Compose
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate docker-compose files
+        run: docker compose -f docker/docker-compose.dev.yml config
